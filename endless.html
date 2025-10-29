@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Endless 99</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root{--bg:#0b1220;--panel:#071024;--accent:#06b6d4;--danger:#ef4444;--safe:#10b981}
+  html,body{height:100%;margin:0;background:var(--bg);color:#e6eef8;font-family:system-ui,Arial}
+  .wrap{display:flex;gap:16px;padding:12px;box-sizing:border-box;align-items:flex-start}
+  .game{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start}
+  canvas{background:linear-gradient(180deg,#071028 0%, #05101a 100%);border:4px solid #0f1724;border-radius:8px;display:block}
+  .ui{width:360px}
+  .panel{background:var(--panel);padding:12px;border-radius:8px;border:1px solid #123;margin-bottom:12px}
+  .btn{background:var(--accent);color:#012;padding:8px 12px;border-radius:6px;border:none;cursor:pointer}
+  .small{font-size:13px;color:#9fb0c6}
+  .score{font-size:18px;font-weight:800;color:var(--accent)}
+
+  .palette{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px; max-height: calc((34px + 6px) * 3); overflow:auto; padding-right:6px}
+  .swatch{width: 20px;height:20px;border-radius:4px;cursor:pointer;border:2px solid transparent;position:relative}
+  .swatch.locked{opacity:0.35}
+  .swatch.locked::after{content:'🔒';position:absolute;right:2px;top:0;font-size:12px}
+  .skins{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px; max-height: calc((44px + 8px) * 3); overflow:auto; padding-right:6px}
+  .skinBtn{width:44px;height:44px;border-radius:6px;background:#0f1724;border:2px solid transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative}
+  .skinBtn.locked{opacity:0.35}
+
+  .statRow{display:flex;justify-content:space-between;color:#9fb0c6;padding:4px 0}
+  .tooltip{position:absolute;pointer-events:none;background:#071024;color:#e6eef8;padding:6px;border-radius:6px;font-size:12px;box-shadow:0 6px 18px rgba(0,0,0,0.6);display:none;z-index:9999}
+
+  #hardcoreToggleWrap{position:fixed; left:12px; top:50%; transform:translateY(-50%); z-index:40;}
+  .hcPanel{background:var(--panel); padding:8px 10px; border-radius:8px; border:1px solid #123; display:flex; flex-direction:column; gap:8px; align-items:center; width:110px}
+  .hcLabel{font-size:13px; color:#9fb0c6; text-align:center}
+  .switch{position:relative;width:48px;height:26px;border-radius:20px;background:#223;cursor:pointer}
+  .switch.locked{opacity:0.35; cursor:default}
+  .knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#06b6d4;transition:all 0.18s}
+  .switch.on{background:#054c3f}
+  .switch.on .knob{left:25px;background:#10b981}
+</style>
+</head>
+<body>
+
+<div id="hardcoreToggleWrap">
+  <div class="hcPanel">
+    <div class="hcLabel">Hardcore</div>
+    <div id="hcSwitch" class="switch" title="Desbloqueado en Best ≥ 5000">
+      <div class="knob"></div>
+    </div>
+    <div id="hcState" class="small">(bloqueado)</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="game">
+    <canvas id="c" width="1100" height="520"></canvas>
+    <div class="small" style="margin-top:8px">Click / Space / ↑ para cambiar gravedad. Cooldown 0.1s entre flips.</div>
+  </div>
+
+  <div class="ui">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>Endless 99</div>
+        <div class="score" id="score">0</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px">
+        <div class="small">Best Score: <span id="best">0</span></div>
+      </div>
+
+      <div style="margin-top:10px;display:flex;gap:8px">
+        <button id="startBtn" class="btn">Play</button>
+      </div>
+
+      <div class="small" style="margin-top:10px">Cube's Colors:</div>
+      <div id="palette" class="palette"></div>
+
+      <!-- gradient control will be placed here (below palette) by script -->
+
+      <div class="small" style="margin-top:10px">Cube's Skins:</div>
+      <div id="skins" class="skins"></div>
+
+      <div style="margin-top:10px" class="small">STATS</div>
+      <div class="statRow"><div>Flips</div><div id="statJumps">0</div></div>
+      <div class="statRow"><div>Flips Saves</div><div id="statSpikeJumps">0</div></div>
+      <div class="statRow"><div>Deads</div><div id="statDeaths">0</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="small">How to play</div>
+      <ul class="small">
+        <li>You flip by clicking, the flip makes you change gravity and go up or down</li>
+        <li>You can customize your cube by editing the colors and skins arrays inside the script</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip" class="tooltip"></div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  const VISIBLE_COLS = 18;
+  const ROWS = 11; 
+  let CELL = Math.floor((canvas.height / ROWS) * 0.92) || 48;
+  canvas.width = CELL * VISIBLE_COLS;
+  canvas.height = CELL * ROWS;
+
+  const GROUND_ROW = ROWS - 1;
+  const FIXED_SPEED = 4;
+  const GRAV = 0.0014;
+  let gravityDir = 1;
+
+  const LOOKAHEAD_COLS = Math.max(70, VISIBLE_COLS * 4);
+
+  // UI refs
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const paletteEl = document.getElementById('palette');
+  const skinsEl = document.getElementById('skins');
+  const statJumpsEl = document.getElementById('statJumps');
+  const statSpikeJumpsEl = document.getElementById('statSpikeJumps');
+  const statDeathsEl = document.getElementById('statDeaths');
+  const tooltip = document.getElementById('tooltip');
+
+  // hardcore UI
+  const hcSwitch = document.getElementById('hcSwitch');
+  const hcState = document.getElementById('hcState');
+
+  // game state
+  let columns = [];
+  let offset = 0;
+  let player = null;
+  let last = 0;
+  let running = false;
+  let gameOver = false;
+  let distance = 0;
+  let spawnTimer = 0;
+  let spawnInterval = 200;
+  let best = Number(localStorage.getItem('gj_grid_best') || 0);
+  bestEl.innerText = best;
+
+  const stats = {
+    jumps: Number(localStorage.getItem('gj_stats_jumps') || 0),
+    spikeJumps: Number(localStorage.getItem('gj_stats_spikeJumps') || 0),
+    deaths: Number(localStorage.getItem('gj_stats_deaths') || 0),
+    distance: Number(localStorage.getItem('gj_stats_distance') || 0)
+  };
+  updateStatsUI();
+
+  // ===== CUSTOMIZABLE: edit these arrays to add/remove colors and skins =====
+  // Each color: { id, color, req } where req is an object with bestScore/jumps/spikeJumps/deaths
+  const colors = [
+    { id:'Cyan', color:'#06b6d4', req: null },
+    { id:'Lime', color:'#10b981', req: {score:100} },
+    { id:'Gold', color:'#f59e0b', req: {score:400} },
+    { id:'Violet', color:'#8b5cf6', req: {spikeJumps:5} },
+    { id:'Red', color:'#ef4444', req: {deaths:10} },
+    { id:'Pink', color:'#ec4899', req: {score:777} },
+    { id:'Black', color:'#111827', req: {deaths:50} },
+    { id:'Sky', color:'#60a5fa', req: {jumps:50} },
+    { id:'Invisible', color:'#00ffa300', req: {jumps:1000} },
+    { id:'Mint', color:'#98ffb3', req: {deaths: 666} },
+    { id:'Teal', color:'#008080', req:null },
+    { id:'Orange', color:'#ff8c42', req:null },
+    { id:'Maroon', color:'#800000', req:null },
+    { id:'Olive', color:'#808000', req:null },
+    { id:'Navy', color:'#001f54', req:null },
+    { id:'Coral', color:'#ff6b6b', req:null },
+    { id:'Turquoise', color:'#40e0d0', req:null },
+    { id:'Magenta', color:'#ff00ff', req:null },
+    { id:'Lavender', color:'#c7a2ff', req:null },
+    { id:'Peach', color:'#ffd1a9', req:null },
+    { id:'MintDark', color:'#2ec4b6', req:null },
+    { id:'Amber', color:'#ffbf00', req:null },
+    { id:'Forest', color:'#0b6623', req:null },
+    { id:'Steel', color:'#5a6e7f', req:null },
+    { id:'Rose', color:'#ff66b3', req:null },
+    { id:'Azure', color:'#007fff', req:null },
+    { id:'Sand', color:'#e4cfa9', req:null },
+    { id:'Plum', color:'#8e4585', req:null },
+    { id:'MintLight', color:'#bff7d0', req:null }
+  ];
+
+  const skins = [
+    { id:'none', name:'Ninguna', req:null },
+    { id:'smile', name:'Smile', req:{score:500} },
+    { id:'tri-face', name:'Tri', req:{jumps:30} },
+    { id:'cross', name:'Cross', req:{spikeJumps:1} },
+    { id:'hex', name:'Hex', req:{score:1000} },
+    { id:'glasses', name:'Glasses', req:{jumps:50} },
+    { id:'ghost', name:'Ghost', req:{deaths:25} },
+    { id:'circle-eye', name:'Circle', req:{spikeJumps:10} },
+    { id:'heart', name:'Heart', req:null },
+    { id:'skull', name:'Skull', req:null },
+    { id:'eye', name:'Eye', req:null },
+    { id:'ball-skin', name:'Ball', req:null },
+    { id:'vvvvvv', name:'VVVVVV', req:null },
+    { id:'smile-text', name:':)', req:null },
+    { id:'sad-text', name:':(', req:null },
+    { id:'star', name:'Star', req:null },
+    { id:'dot', name:'Dot', req:null },
+    { id:'stripe', name:'Stripe', req:null },
+    { id:'gear', name:'Gear', req:null },
+    { id:'leaf', name:'Leaf', req:null },
+    { id:'flame', name:'Flame', req:null },
+    { id:'spark', name:'Spark', req:null },
+    { id:'bolt', name:'Bolt', req:null },
+    { id:'mask', name:'Mask', req:null },
+    { id:'robot', name:'Robot', req:null },
+    { id:'glow', name:'Glow', req:null },
+    { id:'comic', name:'Comic', req:null },
+    { id:'pixel', name:'Pixel', req:null }
+  ];
+  // ===== end customizable block =====
+
+  const saved = JSON.parse(localStorage.getItem('gj_prefs') || '{}');
+  let currentColor = saved.color || 'Cyan';
+  let currentSkin = saved.skin || 'none';
+  let gradientEnabled = !!saved.gradient;
+  let hardcoreMode = !!saved.hardcore && best >= 5000; // only allow if unlocked
+
+  const SPIKE_HITBOX_W_FRAC = 0.28;
+  const SPIKE_HITBOX_H_FRAC = 0.9;
+
+  // flip cooldown lowered to 100ms
+  const FLIP_COOLDOWN = 100;
+  let lastFlipTime = -99999;
+
+  const COYOTE_MS = 100;
+  let coyoteTimer = 0;
+
+  // moving entities (balls)
+  const entities = []; // { type:'vball'|'hball', colIndex, row, period(ms), amp(cells), phase(ms) }
+
+  // teleport smoothing params
+  const TELEPORT_DURATION = 0; // 0 = teleport directo inmediato
+
+  // helpers
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+    const num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+  function rgbToHex(r,g,b){ return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+  function lightenHex(hex, amount){ // amount 0..1
+    const c = hexToRgb(hex);
+    const r = Math.min(255, Math.round(c.r + (255-c.r)*amount));
+    const g = Math.min(255, Math.round(c.g + (255-c.g)*amount));
+    const b = Math.min(255, Math.round(c.b + (255-c.b)*amount));
+    return rgbToHex(r,g,b);
+  }
+
+  // helper: circle vs rect intersection
+  function circleRectIntersect(cx, cy, r, rx, ry, rw, rh){
+    const closestX = Math.max(rx, Math.min(cx, rx + rw));
+    const closestY = Math.max(ry, Math.min(cy, ry + rh));
+    const dx = cx - closestX;
+    const dy = cy - closestY;
+    return (dx*dx + dy*dy) <= (r*r);
+  }
+
+  async function savePrefs(){
+    // write prefs to storage and yield once so callers can await the operation
+    localStorage.setItem('gj_prefs', JSON.stringify({ color: currentColor, skin: currentSkin, gradient: !!gradientEnabled, hardcore: !!hardcoreMode }));
+    await Promise.resolve();
+  }
+  function updateStatsUI(){
+    statJumpsEl.innerText = stats.jumps;
+    statSpikeJumpsEl.innerText = stats.spikeJumps;
+    statDeathsEl.innerText = stats.deaths;
+    scoreEl.innerText = Math.floor(distance);
+    bestEl.innerText = best;
+    // reflect hardcore UI
+    updateHardcoreUI();
+  }
+
+  function updateHardcoreUI(){
+    const unlocked = best >= 5000;
+    if(!unlocked){
+      hcSwitch.classList.add('locked');
+      hcState.innerText = '(bloqueado)';
+      hcSwitch.classList.remove('on');
+    } else {
+      hcSwitch.classList.remove('locked');
+      if(hardcoreMode){ hcSwitch.classList.add('on'); hcState.innerText = '(ON)'; }
+      else { hcSwitch.classList.remove('on'); hcState.innerText = '(OFF)'; }
+    }
+  }
+
+  function emptyColumn(){ return new Array(ROWS).fill('empty'); }
+  function baseColumn(){
+    const c = emptyColumn();
+    c[0] = 'ground';
+    c[GROUND_ROW] = 'ground';
+    return c;
+  }
+
+  function initColumns(count = VISIBLE_COLS + LOOKAHEAD_COLS){
+    columns = [];
+    for(let i=0;i<count;i++) columns.push(baseColumn());
+    offset = 0;
+  }
+
+  // helpers for safe spike placement:
+  function tryPlaceBottomSpike(col){
+    const r = GROUND_ROW - 1;
+    if(r >= 0 && col[r] === 'empty' && (col[GROUND_ROW] === 'ground' || col[GROUND_ROW] === 'platform')){
+      col[r] = 'spike';
+      return true;
+    }
+    return false;
+  }
+  function tryPlaceTopSpike(col){
+    const r = 1;
+    if(r < ROWS && col[r] === 'empty' && (col[0] === 'ground' || col[0] === 'platform')){
+      col[r] = 'spike';
+      return true;
+    }
+    return false;
+  }
+  function tryPlaceSpikeAbovePlatform(col, platformRow){
+    const r = platformRow - 1;
+    if(r >= 0 && col[r] === 'empty' && (col[platformRow] === 'platform' || col[platformRow] === 'ground')){
+      col[r] = 'spike';
+      return true;
+    }
+    return false;
+  }
+
+  // find largest contiguous empty vertical segment in a column, return {start,len}
+  function largestEmptySegment(col){
+    let bestStart = -1, bestLen = 0;
+    let i=0;
+    while(i<ROWS){
+      while(i<ROWS && col[i] !== 'empty') i++;
+      if(i>=ROWS) break;
+      const s = i;
+      while(i<ROWS && col[i] === 'empty') i++;
+      const l = i - s;
+      if(l > bestLen){ bestLen = l; bestStart = s; }
+    }
+    return { start: bestStart, len: bestLen };
+  }
+
+  // spawn groups with rules using current in-game score (distance), and increased difficulty thresholds
+  function spawnColumnGroup(){
+    const curScore = Math.floor(distance); // use in-game score (recent), not best
+    const r = Math.random();
+
+    // base chances
+    let voidChance = 0.32;
+    let platformChance = 0.28;
+
+    // hardcore mode: structures start appearing earlier and scale every +500 score
+    const greenThreshold = hardcoreMode ? 100 : 500;
+    const pinkThreshold = hardcoreMode ? 100 : 750;
+
+    // scale steps every 500 points when hardcore
+    const scaleSteps = hardcoreMode ? Math.max(0, Math.floor((curScore - 100) / 500)) : 0;
+    const freqMultiplier = 1 + scaleSteps * 0.5; // each step increases frequency
+
+    // make chances scale when hardcore so obstacles and balls appear more often
+    voidChance *= hardcoreMode ? (1 + scaleSteps * 0.2) : 1;
+    platformChance *= hardcoreMode ? (1 + scaleSteps * 0.25) : 1;
+
+    // activation flags
+    const greenActive = curScore >= greenThreshold;
+    const pinkActive = curScore >= pinkThreshold;
+
+    if(r < voidChance){
+      const len = 2 + Math.floor(Math.random()*6);
+      for(let i=0;i<len;i++){
+        const col = emptyColumn();
+        if(Math.random() < 0.18 * freqMultiplier) {
+          const pr = 1 + Math.floor(Math.random()*(ROWS-3));
+          col[pr] = 'platform';
+        }
+        if(Math.random() < 0.12 * freqMultiplier) tryPlaceTopSpike(col);
+        if(Math.random() < 0.12 * freqMultiplier) tryPlaceBottomSpike(col);
+
+        columns.push(col);
+
+        // vertical-moving green ball: spawn only if player has reached required in-game score
+        const seg = largestEmptySegment(col);
+        let greenChance = greenActive ? 0.09 * freqMultiplier : 0.0; // notable increase when active
+        if(curScore >= 1000) greenChance *= 1.5; // even more later
+        if(greenActive && seg.len >= 3 && Math.random() < greenChance){
+          const centerRow = seg.start + Math.floor(seg.len/2);
+          entities.push({
+            type: 'vball',
+            colIndex: columns.length - 1,
+            row: centerRow,
+            period: 5000,
+            amp: Math.max(1, Math.floor(seg.len/2)),
+            phase: Math.random()*5000
+          });
+        }
+      }
+      return;
+    }
+
+    if(r < platformChance){
+      const maxLen = 30;
+      const len = 3 + Math.floor(Math.random() * Math.min(12, maxLen-3));
+      const platformHeightAboveGround = 1 + Math.floor(Math.random()*3);
+      const row = Math.max(1, GROUND_ROW - platformHeightAboveGround);
+      const startIdx = columns.length;
+      for(let i=0;i<len;i++){
+        const col = baseColumn();
+        col[row] = 'platform';
+        columns.push(col);
+      }
+
+      // vertical platform structures: start spawning after best >= 50 (existing)
+      if(best >= 50 && Math.random() < 0.12 * freqMultiplier){
+        const idx = startIdx + 1 + Math.floor(Math.random() * Math.max(1, len - 2));
+        const height = best >= 500 ? (4 + Math.floor(Math.random()*3)) : (2);
+        const baseRow = Math.max(1, row - (height - 1));
+        for(let h=0; h<height; h++){
+          columns[idx][baseRow + h] = 'platform';
+        }
+      }
+
+      // spike frequencies increased when in-game score high or hardcore scaling applied
+      let spikeChance = 0.30 * freqMultiplier;
+      let topSpikeChance = 0.20 * freqMultiplier;
+      if(curScore >= 2000 && !hardcoreMode){ spikeChance = 0.62; topSpikeChance = 0.40; }
+
+      if(len > 3){
+        for(let i = 0; i < len; i++){
+          if(i < 2) continue;
+          const gi = startIdx + i;
+          if(Math.random() < spikeChance) tryPlaceSpikeAbovePlatform(columns[gi], row);
+          if(Math.random() < topSpikeChance) tryPlaceTopSpike(columns[gi]);
+
+          // pink horizontal balls: spawn only if in-game reached threshold
+          let pinkChance = pinkActive ? 0.10 * freqMultiplier : 0.0; // increase when active
+          if(curScore >= 1000) pinkChance *= 1.5;
+          if(pinkActive && Math.random() < pinkChance){
+            entities.push({
+              type: 'hball',
+              colIndex: gi,
+              row: Math.max(0, row - 1),
+              period: 5000,
+              amp: 2,
+              phase: Math.random()*5000
+            });
+          }
+        }
+      }
+    } else {
+      const col = baseColumn();
+      if(Math.random() < 0.12 * freqMultiplier) tryPlaceBottomSpike(col);
+      if(Math.random() < 0.06 * freqMultiplier) tryPlaceTopSpike(col);
+
+      // more platforms when curScore>=2000 or scaled in hardcore
+      if(Math.random() < ((curScore >= 2000 ? 0.18 : 0.08) * freqMultiplier)){
+        const rrow = Math.max(1, GROUND_ROW - (1 + Math.floor(Math.random()*6)));
+        col[rrow] = 'platform';
+      }
+      columns.push(col);
+
+      // occasional pink ball in single columns (rare), gated by in-game score
+      const seg = largestEmptySegment(col);
+      let singlePinkChance = pinkActive ? 0.06 * freqMultiplier : 0.0;
+      if(curScore >= 3000) singlePinkChance *= 1.5;
+      if(pinkActive && seg.len >= 2 && Math.random() < singlePinkChance){
+        const centerRow = seg.start + Math.floor(seg.len/2);
+        entities.push({
+          type: 'hball',
+          colIndex: columns.length - 1,
+          row: centerRow,
+          period: 5000,
+          amp: 2,
+          phase: Math.random()*5000
+        });
+      }
+    }
+  }
+
+  function ensureColumns(minCount){ while(columns.length < minCount) spawnColumnGroup(); }
+
+  function resetPlayer(){
+    player = {
+      x: CELL * 2,
+      y: (GROUND_ROW * CELL) - CELL,
+      w: CELL, h: CELL,
+      vy: 0,
+      grounded: true,
+      rot: 0,
+      spikeUnderAtFlip: false,
+      teleport: { active: false, fromY: 0, toY: 0, remaining: 0, total: 0 }
+    };
+    gravityDir = 1;
+    player.rot = gravityDir === 1 ? 0 : Math.PI;
+    lastFlipTime = performance.now() - FLIP_COOLDOWN;
+  }
+
+  function rectIntersect(ax,ay,aw,ah, bx,by,bw,bh){
+    return !(ax+aw <= bx || ax >= bx+bw || ay+ah <= by || ay >= by+bh);
+  }
+
+  function getCellRect(colIndex, rowIndex){
+    const worldX = colIndex * CELL - offset;
+    const worldY = rowIndex * CELL;
+    return { x: worldX, y: worldY, w: CELL, h: CELL };
+  }
+
+  // UI builders - tooltip shows name + requirements
+  async function buildPalette(){
+    paletteEl.innerHTML = '';
+    colors.forEach(c=>{
+      const sw = document.createElement('div');
+      sw.className = 'swatch';
+      sw.style.background = c.color;
+      const unlocked = checkUnlocked(c.req);
+      if(!unlocked) sw.classList.add('locked');
+      if(c.id === currentColor){ sw.style.borderColor = '#fff8'; sw.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.06)'; }
+      const reqText = requirementText(c.req) || 'Disponible';
+      sw.title = c.id + ' — ' + reqText;
+      sw.addEventListener('mouseenter', (ev)=> showTooltip(ev, sw.title));
+      sw.addEventListener('mousemove', (ev)=> moveTooltip(ev));
+      sw.addEventListener('mouseleave', hideTooltip);
+      sw.addEventListener('click', async ()=> {
+        if(!checkUnlocked(c.req)) return;
+        currentColor = c.id;
+        await savePrefs();
+        render();
+        await buildPalette();
+      });
+      paletteEl.appendChild(sw);
+    });
+
+    // gradient toggle / preview (placed below the palette scroll)
+    const existing = document.getElementById('gradControl');
+    if(existing) existing.remove();
+
+    const gradWrap = document.createElement('div');
+    gradWrap.id = 'gradControl';
+    gradWrap.style.display = 'flex';
+    gradWrap.style.alignItems = 'center';
+    gradWrap.style.gap = '8px';
+    gradWrap.style.marginTop = '10px';
+
+    const box = document.createElement('div');
+    const colObj = colors.find(c=>c.id===currentColor) || colors[0];
+    // sample gradient: brighter variant + base
+    const bright = lightenHex(colObj.color || '#06b6d4', 0.28);
+    box.style.width = '10px';
+    box.style.height = '10px';
+    box.style.borderRadius = '6px';
+    box.style.border = '1px solid transparent';
+    box.style.background = `linear-gradient(90deg, ${bright}, ${colObj.color})`;
+    box.title = 'Gradient del cube (desbloqueado en Best ≥ 5000)';
+
+    const label = document.createElement('div');
+    label.className = 'small';
+    label.style.userSelect = 'none';
+    label.innerText = `Gradient (Best≥5000)`;
+
+    // locked if best < 5000
+    const locked = best < 5000;
+    if(locked){
+      box.style.opacity = '0.35'; label.style.opacity = '0.35'; box.title += ' — Bloqueado';
+    } else {
+      box.style.cursor = 'pointer';
+      box.addEventListener('click', async ()=>{ gradientEnabled = !gradientEnabled; await savePrefs(); render(); await buildPalette(); });
+      label.style.cursor = 'pointer';
+      label.addEventListener('click', async ()=>{ gradientEnabled = !gradientEnabled; await savePrefs(); render(); await buildPalette(); });
+    }
+
+    // indicator for enabled
+    const state = document.createElement('div');
+    state.className = 'small';
+    state.style.marginLeft = '6px';
+    state.innerText = locked ? '(bloqueado)' : (gradientEnabled ? '(ON)' : '(OFF)');
+    gradWrap.appendChild(box);
+    gradWrap.appendChild(label);
+    gradWrap.appendChild(state);
+
+    // append after palette's container (so it's below the scroll)
+    paletteEl.parentNode.insertBefore(gradWrap, paletteEl.nextSibling);
+    // ensure microtask yield so UI updates smoothly when awaited by callers
+    await Promise.resolve();
+  }
+
+  async function buildSkins(){
+    skinsEl.innerHTML = '';
+    skins.forEach(s=>{
+      const b = document.createElement('div'); b.className='skinBtn';
+      if(!checkUnlocked(s.req)) b.classList.add('locked');
+      if(s.id === currentSkin) b.style.borderColor = '#fff8'; else b.style.borderColor = 'transparent';
+
+      // larger preview canvas to match increased skinBtn size
+      const mini = document.createElement('canvas'); mini.width=30; mini.height=30;
+      const mctx = mini.getContext('2d');
+      // background
+      mctx.fillStyle = '#06b6d4'; mctx.fillRect(6,6,44,44);
+      mctx.fillStyle = '#0b1220';
+      mctx.textBaseline = 'middle';
+      mctx.textAlign = 'center';
+      mctx.font = '14px sans-serif';
+
+      // small previews for many skins (use coordinates scaled to 44x44 area)
+      // center offset 6..50 used above
+      function px(x){ return 6 + x; }
+      function py(y){ return 6 + y; }
+
+      if(s.id === 'smile'){ mctx.fillStyle='#fff'; mctx.fillRect(px(6),py(8),4,4); mctx.fillRect(px(20),py(8),4,4); mctx.beginPath(); mctx.arc(px(16),py(20),10,0,Math.PI); mctx.fill(); }
+      else if(s.id === 'tri-face'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.moveTo(px(22),py(4)); mctx.lineTo(px(34),py(32)); mctx.lineTo(px(10),py(32)); mctx.closePath(); mctx.fill(); }
+      else if(s.id === 'cross'){ mctx.strokeStyle='#fff'; mctx.lineWidth=3; mctx.beginPath(); mctx.moveTo(px(6),py(6)); mctx.lineTo(px(38),py(38)); mctx.moveTo(px(38),py(6)); mctx.lineTo(px(6),py(38)); mctx.stroke(); }
+      else if(s.id === 'hex'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.moveTo(px(22),py(2)); for(let i=1;i<6;i++){ const a = (Math.PI*2/6)*i - Math.PI/2; mctx.lineTo(px(22+10*Math.cos(a)),py(22+10*Math.sin(a))); } mctx.closePath(); mctx.fill(); }
+      else if(s.id === 'glasses'){ mctx.fillStyle='#fff'; mctx.fillRect(px(4),py(12),10,10); mctx.fillRect(px(30),py(12),10,10); mctx.fillRect(px(18),py(18),8,4); }
+      else if(s.id === 'ghost'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.arc(px(22),py(22),12,Math.PI,0); mctx.fill(); }
+      else if(s.id === 'circle-eye'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.arc(px(22),py(22),12,0,Math.PI*2); mctx.fill(); mctx.fillStyle='#0b1220'; mctx.fillRect(px(20),py(14),4,12); }
+
+      // added previews (larger)
+      else if(s.id === 'heart'){ mctx.fillStyle='#ff6b6b'; mctx.beginPath(); mctx.moveTo(px(22),py(30)); mctx.bezierCurveTo(px(10),py(22),px(8),py(12),px(22),py(12)); mctx.bezierCurveTo(px(36),py(12),px(34),py(22),px(22),py(30)); mctx.fill(); }
+      else if(s.id === 'skull'){ mctx.fillStyle='#fff'; mctx.fillRect(px(8),py(8),28,20); mctx.fillStyle='#0b1220'; mctx.fillRect(px(12),py(14),6,6); mctx.fillRect(px(26),py(14),6,6); }
+      else if(s.id === 'eye'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.ellipse(px(22),py(22),16,10,0,0,Math.PI*2); mctx.fill(); mctx.fillStyle='#0b1220'; mctx.beginPath(); mctx.arc(px(22),py(22),5,0,Math.PI*2); mctx.fill(); }
+      else if(s.id === 'ball-skin'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.arc(px(22),py(22),16,0,Math.PI*2); mctx.fill(); mctx.fillStyle='#0b1220'; mctx.fillRect(px(20),py(14),4,12); }
+      else if(s.id === 'vvvvvv'){ mctx.strokeStyle='#0b1220'; mctx.lineWidth=2; mctx.beginPath(); mctx.moveTo(px(6),py(36)); mctx.lineTo(px(12),py(8)); mctx.lineTo(px(18),py(36)); mctx.lineTo(px(24),py(8)); mctx.lineTo(px(30),py(36)); mctx.stroke(); }
+      else if(s.id === 'smile-text'){ mctx.fillStyle='#fff'; mctx.fillText(':)', px(22), py(26)); }
+      else if(s.id === 'sad-text'){ mctx.fillStyle='#fff'; mctx.fillText(':(', px(22), py(26)); }
+      else if(s.id === 'star'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.moveTo(px(22),py(6)); mctx.lineTo(px(28),py(26)); mctx.lineTo(px(6),py(12)); mctx.lineTo(px(38),py(12)); mctx.lineTo(px(14),py(26)); mctx.closePath(); mctx.fill(); }
+      else if(s.id === 'dot'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.arc(px(22),py(22),6,0,Math.PI*2); mctx.fill(); }
+      else if(s.id === 'stripe'){ mctx.fillStyle='#fff'; mctx.fillRect(px(10),py(18),24,8); }
+      else if(s.id === 'gear'){ mctx.fillStyle='#fff'; mctx.fillRect(px(18),py(12),8,20); }
+      else if(s.id === 'leaf'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.moveTo(px(22),py(8)); mctx.quadraticCurveTo(px(34),py(18),px(22),py(34)); mctx.quadraticCurveTo(px(10),py(18),px(22),py(8)); mctx.fill(); }
+      else if(s.id === 'flame'){ mctx.fillStyle='#ff9a3c'; mctx.beginPath(); mctx.moveTo(px(22),py(8)); mctx.quadraticCurveTo(px(32),py(20),px(22),py(34)); mctx.quadraticCurveTo(px(12),py(20),px(22),py(8)); mctx.fill(); }
+      else if(s.id === 'spark'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.moveTo(px(22),py(6)); mctx.lineTo(px(24),py(22)); mctx.lineTo(px(38),py(24)); mctx.lineTo(px(24),py(26)); mctx.lineTo(px(22),py(42)); mctx.lineTo(px(20),py(26)); mctx.lineTo(px(6),py(24)); mctx.lineTo(px(20),py(22)); mctx.closePath(); mctx.fill(); }
+      else if(s.id === 'bolt'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.moveTo(px(16),py(6)); mctx.lineTo(px(28),py(24)); mctx.lineTo(px(20),py(24)); mctx.lineTo(px(30),py(42)); mctx.lineTo(px(18),py(22)); mctx.lineTo(px(26),py(22)); mctx.closePath(); mctx.fill(); }
+      else if(s.id === 'mask'){ mctx.fillStyle='#fff'; mctx.fillRect(px(10),py(14),28,12); mctx.fillStyle='#0b1220'; mctx.fillRect(px(14),py(16),6,6); mctx.fillRect(px(30),py(16),6,6); }
+      else if(s.id === 'robot'){ mctx.fillStyle='#fff'; mctx.fillRect(px(12),py(10),20,24); mctx.fillStyle='#0b1220'; mctx.fillRect(px(16),py(18),6,6); mctx.fillRect(px(28),py(18),4,6); }
+      else if(s.id === 'glow'){ mctx.fillStyle='#fff'; mctx.beginPath(); mctx.arc(px(22),py(22),10,0,Math.PI*2); mctx.fill(); mctx.globalAlpha=0.3; mctx.fillStyle='#aef'; mctx.beginPath(); mctx.arc(px(22),py(22),16,0,Math.PI*2); mctx.fill(); mctx.globalAlpha=1; }
+      else if(s.id === 'comic'){ mctx.fillStyle='#fff'; mctx.fillRect(px(8),py(8),28,28); mctx.fillStyle='#0b1220'; mctx.fillText('BAM', px(22), py(24)); }
+      else if(s.id === 'pixel'){ mctx.fillStyle='#fff'; for(let y=12;y<=32;y+=6){ for(let x=10;x<=34;x+=6){ mctx.fillRect(px(x),py(y),4,4); }} }
+      else { // generic small marker for others
+        mctx.fillStyle = '#071024';
+        mctx.fillRect(px(20),py(20),8,8);
+      }
+
+      b.appendChild(mini);
+      const reqText = requirementText(s.req) || 'Disponible';
+      b.title = s.name + ' [' + reqText + ']';
+      b.addEventListener('mouseenter', (ev)=> showTooltip(ev, b.title));
+      b.addEventListener('mousemove', (ev)=> moveTooltip(ev));
+      b.addEventListener('mouseleave', hideTooltip);
+      b.addEventListener('click', async ()=> {
+        if(!checkUnlocked(s.req)) return;
+        currentSkin = s.id;
+        await savePrefs();
+        // re-render UI and thumbnails
+        render();
+        await buildSkins();
+      });
+      skinsEl.appendChild(b);
+    });
+    await Promise.resolve();
+  }
+
+  function requirementText(req){
+    if(!req) return null;
+    const parts=[];
+    if(req.score) parts.push('Score: '+req.score);
+    if(req.jumps) parts.push('Flips: '+req.jumps);
+    if(req.spikeJumps) parts.push('Lucky Flips: '+req.spikeJumps);
+    if(req.deaths) parts.push('Deads: '+req.deaths);
+    return parts.join(', ');
+  }
+  function showTooltip(ev, text){ if(!text) return; tooltip.style.display='block'; tooltip.innerText=text; moveTooltip(ev); }
+  function moveTooltip(ev){ tooltip.style.left = (ev.pageX + 12) + 'px'; tooltip.style.top = (ev.pageY + 12) + 'px'; }
+  function hideTooltip(){ tooltip.style.display='none'; }
+  function checkUnlocked(req){
+    if(!req) return true;
+    if(req.score && best < req.score) return false;
+    if(req.jumps && stats.jumps < req.jumps) return false;
+    if(req.spikeJumps && stats.spikeJumps < req.spikeJumps) return false;
+    if(req.deaths && stats.deaths < req.deaths) return false;
+    return true;
+  }
+
+  // flip input with cooldown: allow flip in air if cooldown passed (cooldown re-applied on flip)
+  function flipPressed(){
+    if(!running) return;
+    const now = performance.now();
+    if(now - lastFlipTime >= FLIP_COOLDOWN){
+      performFlip(now);
+    }
+  }
+
+  function performFlip(now){
+    now = now || performance.now();
+    lastFlipTime = now;
+    gravityDir = -gravityDir;
+    player.vy = 0;
+    player.grounded = false;
+    // register saved flip if there's a spike nearly under/above the player (casi tocar)
+    player.spikeUnderAtFlip = checkSpikeNearPlayer();
+    if(player.spikeUnderAtFlip){
+      stats.spikeJumps++; localStorage.setItem('gj_stats_spikeJumps', stats.spikeJumps);
+    }
+    stats.jumps++; localStorage.setItem('gj_stats_jumps', stats.jumps);
+    player.rot = gravityDir === 1 ? 0 : Math.PI; // immediate rotation
+    updateStatsUI();
+  }
+
+  // check for spike in foot/head row or adjacent row to count as "almost touching"
+  function checkSpikeNearPlayer(){
+    const playerCenterX = player.x + player.w/2;
+    const worldCenterX = playerCenterX + offset;
+    const colIndex = Math.floor(worldCenterX / CELL);
+    const footRow = gravityDir === 1 ? Math.floor((player.y + player.h) / CELL) : Math.floor(player.y / CELL);
+    const rowsToCheck = [footRow, footRow + 1, footRow - 1];
+    for(const r of rowsToCheck){
+      if(r < 0 || r >= ROWS) continue;
+      if(columns[colIndex] && columns[colIndex][r] === 'spike') return true;
+    }
+    return false;
+  }
+
+  // smooth teleport from void: set teleport state instead of immediate reposition
+  function tryTeleportIfVoid(colIndex){
+    const col = columns[colIndex];
+    if(!col) return false;
+    const topEmpty = col[0] === 'empty';
+    const bottomEmpty = col[GROUND_ROW] === 'empty';
+    if(!(topEmpty && bottomEmpty)) return false;
+
+    // decide a target row: nearest non-empty cell if exists, otherwise default
+    let targetRow = -1;
+    for(let r=0;r<ROWS;r++){ if(col[r] && col[r] !== 'empty'){ targetRow = r; break; } }
+
+    // If there is no non-empty cell in this column, teleport to opposite side depending on gravity:
+    // if gravity is down (1) -> teleport to top (just below top ground)
+    // if gravity is up (-1) -> teleport to bottom (on top of ground)
+    if(targetRow === -1){
+      const toY = (gravityDir === 1) ? (1 * CELL) : (GROUND_ROW * CELL) - player.h;
+      startTeleportTo(toY);
+      return true;
+    }
+
+    // If we found a non-empty cell, choose landing based on gravity direction:
+    // - falling down (gravityDir === 1): land just below the found top-ish cell (use targetRow+1)
+    // - falling up (gravityDir === -1): land on top of found cell
+    let landingY;
+    if(gravityDir === 1){
+      // prefer landing below the found object (so player appears near top side)
+      landingY = (targetRow + 1) * CELL;
+    } else {
+      // land on top of the found object (for ceiling side)
+      landingY = targetRow * CELL - player.h;
+    }
+    startTeleportTo(landingY);
+    return true;
+  }
+
+  function startTeleportTo(toY){
+    // si TELEPORT_DURATION == 0 hacemos teleport directo e inmediato
+    if(TELEPORT_DURATION <= 0){
+      player.y = toY;
+      player.vy = 0;
+      player.grounded = true;
+      player.teleport.active = false;
+      player.spikeUnderAtFlip = false;
+      return;
+    }
+    player.teleport.active = true;
+    player.teleport.fromY = player.y;
+    player.teleport.toY = toY;
+    player.teleport.total = TELEPORT_DURATION;
+    player.teleport.remaining = TELEPORT_DURATION;
+    player.vy = 0;
+    player.grounded = false;
+  }
+
+  function finishTeleport(){
+    player.teleport.active = false;
+    player.vy = 0;
+    player.grounded = true;
+    player.spikeUnderAtFlip = false;
+  }
+
+  function handleDeath(){
+    stats.deaths++; localStorage.setItem('gj_stats_deaths', stats.deaths);
+    if(Math.floor(distance) > best){ best = Math.floor(distance); localStorage.setItem('gj_grid_best', best); bestEl.innerText = best; }
+    running = false; gameOver = true;
+    updateStatsUI();
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0,0,canvas.width, canvas.height);
+    ctx.fillStyle = '#fff'; ctx.font = '22px system-ui';
+    ctx.fillText('Game Over', 50, canvas.height/2);
+  }
+
+  function startGame(){
+    resetState();
+    running = true; gameOver = false; last = 0;
+    requestAnimationFrame(loop);
+  }
+  function resetState(){
+    CELL = Math.floor((canvas.height / ROWS) * 0.92) || CELL;
+    canvas.width = CELL * VISIBLE_COLS;
+    // reset in-game score BEFORE prefill so spawn rules use current run score
+    distance = 0;
+    stats.distance = Math.max(stats.distance, Math.floor(distance));
+    // clear any existing moving entities so they don't persist between runs
+    entities.length = 0;
+
+    initColumns();
+    // prefill (now using distance=0) so balls won't spawn initially
+    for(let i=0;i<Math.floor(LOOKAHEAD_COLS/6); i++) spawnColumnGroup();
+    ensureColumns(VISIBLE_COLS + LOOKAHEAD_COLS);
+    resetPlayer();
+    spawnTimer = 0; running = false; gameOver = false;
+    updateStatsUI();
+    // UI builders are async — start them and continue; callers can await if needed
+    buildPalette().then(()=>buildSkins());
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
+
+  function loop(ts){
+    if(!last) last = ts;
+    const dt = Math.min(40, ts - last);
+    last = ts;
+    if(!running) { requestAnimationFrame(loop); return; }
+
+    // integrate gravity if not teleporting
+    if(!player.teleport.active){
+      player.vy += GRAV * gravityDir * dt;
+      player.y += player.vy * dt;
+    } else {
+      // update teleport smoothing
+      player.teleport.remaining -= dt;
+      const t = Math.max(0, player.teleport.remaining);
+      const k = player.teleport.total <= 0 ? 0 : (t / player.teleport.total);
+      // ease-out cubic
+      player.y = player.teleport.toY + (player.teleport.fromY - player.teleport.toY) * (k);
+      if(player.teleport.remaining <= 0) finishTeleport();
+    }
+
+    // coyote
+    if(player.grounded) coyoteTimer = COYOTE_MS; else coyoteTimer = Math.max(0, coyoteTimer - dt);
+
+    // world movement
+    const move = FIXED_SPEED * (dt/16.67);
+    offset += move;
+    distance += move * 0.15;
+    stats.distance = Math.max(stats.distance, Math.floor(distance));
+    spawnTimer += dt;
+
+    if(spawnTimer >= spawnInterval){
+      spawnTimer = 0;
+      spawnColumnGroup();
+      if(Math.random() < 0.5) spawnColumnGroup();
+    }
+
+    // remove left columns and update entities' colIndex
+    const leftmost = Math.floor(offset / CELL);
+    if(leftmost > 0){
+      columns.splice(0, leftmost);
+      offset = offset % CELL;
+      for(const e of entities) e.colIndex -= leftmost;
+      for(let i=entities.length-1;i>=0;i--){
+        if(entities[i].colIndex < -6) entities.splice(i,1);
+      }
+    }
+    ensureColumns(VISIBLE_COLS + LOOKAHEAD_COLS);
+
+    // determine column under player
+    const playerCenterX = player.x + player.w/2;
+    const worldCenterX = playerCenterX + offset;
+    const colIndex = Math.floor(worldCenterX / CELL);
+
+    // teleport if out of bounds and current column is void
+    if((player.y > canvas.height || player.y + player.h < 0) && !player.teleport.active){
+      if(tryTeleportIfVoid(colIndex)){
+        // started smooth teleport
+      } else {
+        return handleDeath();
+      }
+    }
+
+    // if teleporting, update entities for visuals and collisions, render and continue
+    if(player.teleport.active){
+      updateEntitiesAndCheckCollisions();
+      render();
+      updateStatsUI();
+      requestAnimationFrame(loop);
+      return;
+    }
+
+    // collision detection (existing logic)...
+    const prevBottom = player.y + player.h - player.vy * dt;
+    const prevTop = player.y - player.vy * dt;
+    let landed = false;
+
+    // platforms check
+    for(let ci = colIndex - 1; ci <= colIndex + 1; ci++){
+      const col = columns[ci];
+      if(!col) continue;
+      for(let r=0;r<ROWS;r++){
+        if(col[r] !== 'platform') continue;
+        const rect = getCellRect(ci, r);
+        if(gravityDir === 1){
+          const platTop = rect.y;
+          if(player.x + player.w > rect.x + 1 && player.x < rect.x + rect.w - 1){
+            if(prevBottom <= platTop + 1 && player.y + player.h >= platTop && player.vy >= -1.0){
+              player.y = platTop - player.h; player.vy = 0; player.grounded = true; landed = true;
+              if(player.spikeUnderAtFlip){ player.spikeUnderAtFlip = false; }
+            } else {
+              if(player.y + player.h > rect.y + 2 && player.y < rect.y + rect.h - 2) return handleDeath();
+            }
+          }
+        } else {
+          const platBottom = rect.y + rect.h;
+          if(player.x + player.w > rect.x + 1 && player.x < rect.x + rect.w - 1){
+            if(prevTop >= platBottom - 1 && player.y <= platBottom && player.vy <= 1.0){
+              player.y = platBottom; player.vy = 0; player.grounded = true; landed = true;
+              if(player.spikeUnderAtFlip){ player.spikeUnderAtFlip = false; }
+            } else {
+              if(player.y < rect.y + rect.h - 2 && player.y + player.h > rect.y + 2) return handleDeath();
+            }
+          }
+        }
+      }
+    }
+
+    // floor / ceiling checks
+    if(!landed){
+      if(gravityDir === 1){
+        const footCol = colIndex;
+        const footRow = Math.floor((player.y + player.h) / CELL);
+        const cellType = columns[footCol] && columns[footCol][footRow] ? columns[footCol][footRow] : 'empty';
+        const cellTopY = footRow * CELL;
+        if(cellType === 'ground'){
+          if(prevBottom <= cellTopY + 1 && player.y + player.h >= cellTopY){
+            player.y = cellTopY - player.h; player.vy = 0; player.grounded = true;
+            if(player.spikeUnderAtFlip){ player.spikeUnderAtFlip = false; }
+          } else {
+            if(player.y + player.h > cellTopY + 2 && player.y < cellTopY + CELL - 2) { if(!player.grounded) return handleDeath(); }
+          }
+        } else if(cellType === 'spike'){
+          const rect = getCellRect(footCol, footRow);
+          const hbW = rect.w * SPIKE_HITBOX_W_FRAC;
+          const hbH = rect.h * SPIKE_HITBOX_H_FRAC;
+          const hbX = rect.x + (rect.w - hbW) / 2;
+          const hbY = rect.y + (rect.h - hbH) / 2;
+          if(rectIntersect(player.x, player.y, player.w, player.h, hbX, hbY, hbW, hbH)) return handleDeath();
+          else player.grounded = false;
+        } else player.grounded = false;
+      } else {
+        const headCol = colIndex;
+        const headRow = Math.floor(player.y / CELL);
+        const cellType = columns[headCol] && columns[headCol][headRow] ? columns[headCol][headRow] : 'empty';
+        const cellBottomY = (headRow + 1) * CELL;
+        if(cellType === 'ground'){
+          if(prevTop >= cellBottomY - 1 && player.y <= cellBottomY){
+            player.y = cellBottomY; player.vy = 0; player.grounded = true;
+            if(player.spikeUnderAtFlip){ player.spikeUnderAtFlip = false; }
+          } else {
+            if(player.y < cellBottomY && player.y + player.h > cellBottomY - CELL) { if(!player.grounded) return handleDeath(); }
+          }
+        } else if(cellType === 'spike'){
+          const rect = getCellRect(headCol, headRow);
+          const hbW = rect.w * SPIKE_HITBOX_W_FRAC;
+          const hbH = rect.h * SPIKE_HITBOX_H_FRAC;
+          const hbX = rect.x + (rect.w - hbW) / 2;
+          const hbY = rect.y + (rect.h - hbH) / 2;
+          if(rectIntersect(player.x, player.y, player.w, player.h, hbX, hbY, hbW, hbH)) return handleDeath();
+          else player.grounded = false;
+        } else player.grounded = false;
+      }
+    }
+
+    // generic spike check
+    for(let ci = colIndex - 3; ci <= colIndex + 3; ci++){
+      const col = columns[ci];
+      if(!col) continue;
+      for(let r=0;r<ROWS;r++){
+        if(col[r] !== 'spike') continue;
+        const rect = getCellRect(ci, r);
+        const hbW = rect.w * SPIKE_HITBOX_W_FRAC;
+        const hbH = rect.h * SPIKE_HITBOX_H_FRAC;
+        const hbX = rect.x + (rect.w - hbW) / 2;
+        const hbY = rect.y + (rect.h - hbH) / 2;
+        if(rectIntersect(player.x, player.y, player.w, player.h, hbX, hbY, hbW, hbH)) return handleDeath();
+      }
+    }
+
+    // update entities (balls) and check collisions
+    updateEntitiesAndCheckCollisions();
+
+    // keep best updated from distance
+    if(Math.floor(distance) > best){
+      best = Math.floor(distance);
+      localStorage.setItem('gj_grid_best', best);
+    }
+
+    render();
+    updateStatsUI();
+    requestAnimationFrame(loop);
+  }
+
+  // updates entities positions and checks circle-based collisions with player
+  function updateEntitiesAndCheckCollisions(){
+    const now = performance.now();
+    for(const e of entities){
+      let cx = (e.colIndex + 0.5) * CELL - offset;
+      let cy = (e.row + 0.5) * CELL;
+      if(e.type === 'vball'){
+        const t = (now + e.phase) % e.period;
+        const s = Math.sin((t / e.period) * Math.PI * 2);
+        cy = (e.row + 0.5) * CELL + s * e.amp * CELL;
+      } else if(e.type === 'hball'){
+        const t = (now + e.phase) % e.period;
+        const s = Math.sin((t / e.period) * Math.PI * 2);
+        cx = (e.colIndex + 0.5) * CELL - offset + s * e.amp * CELL;
+      }
+      const r = Math.max(6, CELL*0.28);
+      const px = player.x, py = player.y, pw = player.w, ph = player.h;
+      if(circleRectIntersect(cx, cy, r, px, py, pw, ph)){
+        handleDeath();
+        return;
+      }
+    }
+  }
+
+  function render(){
+    // background (void) gradient
+    const voidG = ctx.createLinearGradient(0,0,0,canvas.height);
+    voidG.addColorStop(0, '#031023');
+    voidG.addColorStop(1, '#040816');
+    ctx.fillStyle = voidG;
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // grid lines
+    for(let c=0;c<VISIBLE_COLS;c++){
+      for(let r=0;r<ROWS;r++){
+        const rect = getCellRect(c, r);
+        ctx.strokeStyle = 'rgba(147,197,253,0.04)';
+        ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
+      }
+    }
+
+    // draw columns with extra floor visual below/above ground to avoid "floating"
+    for(let ci=0; ci<columns.length; ci++){
+      const col = columns[ci];
+      for(let r=0;r<ROWS;r++){
+        const rect = getCellRect(ci, r);
+        const t = col[r];
+        if(t === 'ground'){
+          ctx.fillStyle = '#102025';
+          // draw main ground cell
+          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+          // create two extra layers for depth (sizes)
+          const layerH1 = Math.floor(CELL * 1.2);
+          const layerH2 = Math.floor(CELL * 0.8);
+
+          if(r === 0){
+            // TOP ground -> draw extra layers ABOVE the top cell, rotated/logically flipped so visuals match
+            // layer closest to top cell
+            ctx.fillStyle = '#0e1f22';
+            ctx.fillRect(rect.x, rect.y - layerH1, rect.w, layerH1);
+            // further layer (darker)
+            ctx.fillStyle = '#0b1620';
+            ctx.fillRect(rect.x, rect.y - layerH1 - layerH2, rect.w, layerH2);
+
+            // subtle vertical gradient inverted for the top-added area
+            const topGrad = ctx.createLinearGradient(0, rect.y - layerH1 - layerH2, 0, rect.y);
+            topGrad.addColorStop(0, 'rgba(5,10,12,0.95)');
+            topGrad.addColorStop(1, 'rgba(10,20,22,0.0)');
+            ctx.fillStyle = topGrad;
+            ctx.fillRect(rect.x, rect.y - layerH1 - layerH2, rect.w, layerH1 + layerH2 + rect.h);
+          } else {
+            // BOTTOM ground -> draw extra layers BELOW the ground cell (same as before)
+            ctx.fillStyle = '#0e1f22';
+            ctx.fillRect(rect.x, rect.y + rect.h, rect.w, layerH1);
+            ctx.fillStyle = '#0b1620';
+            ctx.fillRect(rect.x, rect.y + rect.h + layerH1, rect.w, layerH2);
+
+            // subtle gradient under the ground
+            const botGrad = ctx.createLinearGradient(0, rect.y, 0, rect.y + rect.h + layerH1 + layerH2);
+            botGrad.addColorStop(0, 'rgba(10,18,20,0.0)');
+            botGrad.addColorStop(1, 'rgba(5,10,12,0.95)');
+            ctx.fillStyle = botGrad;
+            ctx.fillRect(rect.x, rect.y, rect.w, rect.h + layerH1 + layerH2);
+          }
+
+        } else if(t === 'spike'){
+          const below = (r+1 < ROWS) ? col[r+1] : null;
+          const above = (r-1 >= 0) ? col[r-1] : null;
+          ctx.fillStyle = '#ef4444';
+          ctx.beginPath();
+          if(below === 'platform' || below === 'ground'){
+            ctx.moveTo(rect.x, rect.y + rect.h);
+            ctx.lineTo(rect.x + rect.w/2, rect.y);
+            ctx.lineTo(rect.x + rect.w, rect.y + rect.h);
+          } else if(above === 'platform' || above === 'ground'){
+            ctx.moveTo(rect.x, rect.y);
+            ctx.lineTo(rect.x + rect.w/2, rect.y + rect.h);
+            ctx.lineTo(rect.x + rect.w, rect.y);
+          } else {
+            ctx.moveTo(rect.x, rect.y + rect.h);
+            ctx.lineTo(rect.x + rect.w/2, rect.y);
+            ctx.lineTo(rect.x + rect.w, rect.y + rect.h);
+          }
+          ctx.closePath();
+          ctx.fill();
+        } else if(t === 'platform'){
+          ctx.fillStyle = '#10b981';
+          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+          ctx.fillStyle = '#0b8b66';
+          ctx.fillRect(rect.x, rect.y + rect.h - 6, rect.w, 6);
+        }
+      }
+    }
+
+    // draw entities (balls) smooth and with circular hitbox visualization
+    const now = performance.now();
+    for(const e of entities){
+      const approxX = (e.colIndex + 0.5) * CELL - offset;
+      if(approxX < -CELL*3 || approxX > canvas.width + CELL*3) continue;
+      let px = (e.colIndex + 0.5) * CELL - offset;
+      let py = (e.row + 0.5) * CELL;
+      if(e.type === 'vball'){
+        const t = (now + e.phase) % e.period;
+        const s = Math.sin((t / e.period) * Math.PI * 2);
+        py = (e.row + 0.5) * CELL + s * e.amp * CELL;
+        ctx.fillStyle = '#ef4444';
+      } else {
+        const t = (now + e.phase) % e.period;
+        const s = Math.sin((t / e.period) * Math.PI * 2);
+        px = (e.colIndex + 0.5) * CELL - offset + s * e.amp * CELL;
+        ctx.fillStyle = '#ef4444';
+      }
+      const r = Math.max(6, CELL*0.28);
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI*2);
+      ctx.fill();
+      // optional subtle stroke
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // draw player: base cube, optional unlocked gradient overlay (on cube only), then skin on top
+    if(!gameOver){
+      ctx.save();
+      const px = player.x + player.w/2;
+      const py = player.y + player.h/2;
+      ctx.translate(px, py);
+      ctx.rotate(player.rot);
+
+      const colObj = colors.find(c=>c.id===currentColor) || colors[0];
+      // cube base
+      ctx.fillStyle = colObj.color;
+      ctx.fillRect(-player.w/2, -player.h/2, player.w, player.h);
+
+      // gradient overlay only si el jugador lo activó y está desbloqueado (best >= 5000)
+      if(best >= 5000 && gradientEnabled){
+        const baseColor = colObj.color || '#06b6d4';
+        const bright = lightenHex(baseColor, 0.28);
+        const g = ctx.createLinearGradient(-player.w/2, -player.h/2, player.w/2, player.h/2);
+        g.addColorStop(0, bright);
+        g.addColorStop(1, 'rgba(255,255,255,0.06)');
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-player.w/2, -player.h/2, player.w, player.h);
+        ctx.clip();
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = g;
+        ctx.fillRect(-player.w/2, -player.h/2, player.w, player.h);
+        ctx.restore();
+      }
+
+      // draw skin on top (not affected by gradient)
+      drawSkin(currentSkin, ctx, player.w, player.h);
+      ctx.restore();
+    }
+
+    // cooldown indicator in HUD
+    const remaining = Math.max(0, FLIP_COOLDOWN - (performance.now() - lastFlipTime));
+    ctx.fillStyle = '#fff8';
+    ctx.font = '12px system-ui';
+    ctx.fillText(Math.floor(distance), 12, 18);
+    ctx.fillText('CD: ' + (remaining > 0 ? (Math.ceil(remaining/100)/10)+'s' : ''), 12, 35);
+  }
+
+  function drawSkin(id, ctxLocal, w, h){
+    ctxLocal.save(); ctxLocal.translate(-w/2, -h/2);
+    if(id === 'smile'){ ctxLocal.fillStyle = '#071024'; ctxLocal.fillRect(w*0.28, h*0.28, w*0.12, h*0.12); ctxLocal.fillRect(w*0.60, h*0.28, w*0.12, h*0.12); ctxLocal.beginPath(); ctxLocal.strokeStyle = '#071024'; ctxLocal.lineWidth = Math.max(2, w*0.04); ctxLocal.arc(w/2, h*0.62, w*0.16, 0, Math.PI, false); ctxLocal.stroke(); }
+    else if(id === 'tri-face'){ ctxLocal.fillStyle = '#071024'; ctxLocal.beginPath(); ctxLocal.moveTo(w/2, h*0.18); ctxLocal.lineTo(w*0.78, h*0.78); ctxLocal.lineTo(w*0.22, h*0.78); ctxLocal.closePath(); ctxLocal.fill(); }
+    else if(id === 'cross'){ ctxLocal.strokeStyle = '#071024'; ctxLocal.lineWidth = Math.max(4, w*0.06); ctxLocal.beginPath(); ctxLocal.moveTo(w*0.22, h*0.22); ctxLocal.lineTo(w*0.78, h*0.78); ctxLocal.moveTo(w*0.78, h*0.22); ctxLocal.lineTo(w*0.22, h*0.78); ctxLocal.stroke(); }
+    else if(id === 'hex'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.moveTo(w*0.5, h*0.2); for(let i=1;i<6;i++){ const a=(Math.PI*2/6)*i - Math.PI/2; ctxLocal.lineTo(w*0.5+ w*0.18*Math.cos(a), h*0.5 + h*0.18*Math.sin(a)); } ctxLocal.closePath(); ctxLocal.fill(); }
+    else if(id === 'glasses'){ ctxLocal.fillStyle='#071024'; ctxLocal.fillRect(w*0.25, h*0.35, w*0.12, w*0.12); ctxLocal.fillRect(w*0.63, h*0.35, w*0.12, w*0.12); ctxLocal.fillRect(w*0.45, h*0.42, w*0.1, h*0.03); }
+    else if(id === 'ghost'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.arc(w*0.5, h*0.45, w*0.22, Math.PI, 0); ctxLocal.fill(); }
+    else if(id === 'circle-eye'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.arc(w*0.5, h*0.5, w*0.22, 0, Math.PI*2); ctxLocal.fill(); ctxLocal.fillStyle='#fff'; ctxLocal.fillRect(w*0.44, h*0.36, w*0.12, h*0.28); }
+
+    else if(id === 'heart'){ ctxLocal.fillStyle = '#ff6b6b'; ctxLocal.beginPath(); ctxLocal.moveTo(w*0.5, h*0.8); ctxLocal.bezierCurveTo(w*0.15,h*0.5, w*0.2,h*0.15, w*0.5,h*0.28); ctxLocal.bezierCurveTo(w*0.8,h*0.15, w*0.85,h*0.5, w*0.5,h*0.8); ctxLocal.fill(); }
+    else if(id === 'skull'){ ctxLocal.fillStyle = '#fff'; ctxLocal.fillRect(w*0.28,h*0.2,w*0.44,h*0.36); ctxLocal.fillStyle = '#071024'; ctxLocal.fillRect(w*0.37,h*0.35,w*0.06,h*0.06); ctxLocal.fillRect(w*0.57,h*0.35,w*0.06,h*0.06); }
+    else if(id === 'eye'){ ctxLocal.fillStyle='#fff'; ctxLocal.beginPath(); ctxLocal.ellipse(w*0.5,h*0.5,w*0.36,h*0.22,0,0,Math.PI*2); ctxLocal.fill(); ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.arc(w*0.5,h*0.5,w*0.10,0,Math.PI*2); ctxLocal.fill(); }
+    else if(id === 'ball-skin'){ ctxLocal.fillStyle = '#071024'; ctxLocal.beginPath(); ctxLocal.arc(w*0.5,h*0.5, Math.min(w,h)*0.45, 0, Math.PI*2); ctxLocal.fill(); ctxLocal.fillStyle = '#fff'; ctxLocal.fillRect(w*0.46,h*0.36,w*0.08,h*0.16); }
+    else if(id === 'vvvvvv'){ ctxLocal.strokeStyle = '#071024'; ctxLocal.lineWidth= Math.max(2,w*0.04); ctxLocal.beginPath(); ctxLocal.moveTo(w*0.12,h*0.8); ctxLocal.lineTo(w*0.22,h*0.2); ctxLocal.lineTo(w*0.36,h*0.8); ctxLocal.lineTo(w*0.48,h*0.2); ctxLocal.lineTo(w*0.62,h*0.8); ctxLocal.stroke(); }
+    else if(id === 'smile-text'){ ctxLocal.fillStyle = '#071024'; ctxLocal.font = Math.max(10, w*0.28)+'px sans-serif'; ctxLocal.fillText(':)', w*0.3, h*0.66); }
+    else if(id === 'sad-text'){ ctxLocal.fillStyle = '#071024'; ctxLocal.font = Math.max(10, w*0.28)+'px sans-serif'; ctxLocal.fillText(':(', w*0.3, h*0.66); }
+    else if(id === 'star'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.moveTo(w*0.5,h*0.12); ctxLocal.lineTo(w*0.625,h*0.38); ctxLocal.lineTo(w*0.92,h*0.4); ctxLocal.lineTo(w*0.68,h*0.6); ctxLocal.lineTo(w*0.75,h*0.88); ctxLocal.lineTo(w*0.5,h*0.72); ctxLocal.lineTo(w*0.25,h*0.88); ctxLocal.lineTo(w*0.32,h*0.6); ctxLocal.lineTo(w*0.08,h*0.4); ctxLocal.lineTo(w*0.375,h*0.38); ctxLocal.closePath(); ctxLocal.fill(); }
+    else if(id === 'dot'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.arc(w*0.5,h*0.5, w*0.12, 0, Math.PI*2); ctxLocal.fill(); }
+    else if(id === 'stripe'){ ctxLocal.fillStyle='#071024'; ctxLocal.fillRect(w*0.22,h*0.44,w*0.56,h*0.12); }
+    else if(id === 'gear'){ ctxLocal.fillStyle='#071024'; ctxLocal.fillRect(w*0.4,h*0.2,w*0.2,h*0.6); }
+    else if(id === 'leaf'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.moveTo(w*0.5,h*0.12); ctxLocal.quadraticCurveTo(w*0.8,h*0.4,w*0.5,h*0.9); ctxLocal.quadraticCurveTo(w*0.2,h*0.4,w*0.5,h*0.12); ctxLocal.fill(); }
+    else if(id === 'flame'){ ctxLocal.fillStyle='#ff9a3c'; ctxLocal.beginPath(); ctxLocal.moveTo(w*0.5,h*0.12); ctxLocal.quadraticCurveTo(w*0.8,h*0.45,w*0.5,h*0.9); ctxLocal.quadraticCurveTo(w*0.2,h*0.45,w*0.5,h*0.12); ctxLocal.fill(); }
+    else if(id === 'spark'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.moveTo(w*0.5,h*0.08); ctxLocal.lineTo(w*0.55,h*0.45); ctxLocal.lineTo(w*0.9,h*0.5); ctxLocal.lineTo(w*0.55,h*0.55); ctxLocal.lineTo(w*0.5,h*0.92); ctxLocal.lineTo(w*0.45,h*0.55); ctxLocal.lineTo(w*0.1,h*0.5); ctxLocal.lineTo(w*0.45,h*0.45); ctxLocal.closePath(); ctxLocal.fill(); }
+    else if(id === 'bolt'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.moveTo(w*0.35,h*0.12); ctxLocal.lineTo(w*0.65,h*0.5); ctxLocal.lineTo(w*0.45,h*0.5); ctxLocal.lineTo(w*0.75,h*0.88); ctxLocal.lineTo(w*0.45,h*0.52); ctxLocal.lineTo(w*0.55,h*0.52); ctxLocal.closePath(); ctxLocal.fill(); }
+    else if(id === 'mask'){ ctxLocal.fillStyle='#071024'; ctxLocal.fillRect(w*0.22,h*0.4,w*0.56,h*0.2); ctxLocal.fillStyle='#fff'; ctxLocal.fillRect(w*0.28,h*0.42,w*0.12,h*0.12); ctxLocal.fillRect(w*0.6,h*0.42,w*0.12,h*0.12); }
+    else if(id === 'robot'){ ctxLocal.fillStyle='#071024'; ctxLocal.fillRect(w*0.3,h*0.2,w*0.4,h*0.6); ctxLocal.fillStyle='#fff'; ctxLocal.fillRect(w*0.38,h*0.4,w*0.08,h*0.08); ctxLocal.fillRect(w*0.54,h*0.4,w*0.06,h*0.08); }
+    else if(id === 'glow'){ ctxLocal.fillStyle='#071024'; ctxLocal.beginPath(); ctxLocal.arc(w*0.5,h*0.5,w*0.2,0,Math.PI*2); ctxLocal.fill(); ctxLocal.globalAlpha=0.22; ctxLocal.fillStyle='#aef'; ctxLocal.beginPath(); ctxLocal.arc(w*0.5,h*0.5,w*0.36,0,Math.PI*2); ctxLocal.fill(); ctxLocal.globalAlpha=1; }
+    else if(id === 'comic'){ ctxLocal.fillStyle='#071024'; ctxLocal.fillRect(w*0.18,h*0.18,w*0.64,h*0.64); ctxLocal.fillStyle='#fff'; ctxLocal.font = Math.max(8,w*0.1)+'px sans-serif'; ctxLocal.fillText('BAM', w*0.5, h*0.56); }
+    else if(id === 'pixel'){ ctxLocal.fillStyle='#071024'; for(let yy=4; yy<=w-8; yy+=8){ for(let xx=4; xx<=w-8; xx+=8){ ctxLocal.fillRect(xx,yy,4,4); } } }
+    else {
+      // fallback: a small mark so other skins exist visually
+      ctxLocal.fillStyle = '#071024'; ctxLocal.fillRect(w*0.44, h*0.44, w*0.12, h*0.12);
+    }
+    ctxLocal.restore();
+  }
+
+  // input events
+  canvas.addEventListener('pointerdown', e => { e.preventDefault(); flipPressed(); });
+  window.addEventListener('keydown', e => { if(e.code === 'Space' || e.code === 'ArrowUp'){ e.preventDefault(); flipPressed(); } });
+  document.getElementById('startBtn').addEventListener('click', ()=> startGame());
+
+  // hardcore switch logic
+  async function toggleHardcore(force){
+    const unlocked = best >= 5000;
+    if(!unlocked) return;
+    hardcoreMode = typeof force === 'boolean' ? force : !hardcoreMode;
+    savePrefs();
+    // reset current run when toggling (activated or deactivated)
+    resetState();
+    updateStatsUI();
+  }
+  hcSwitch.addEventListener('click', async ()=> await toggleHardcore());
+
+  // init UI state from prefs (but enforce unlock)
+  if(saved.hardcore && best >= 5000) hardcoreMode = true;
+  updateHardcoreUI();
+
+  // init
+  initColumns();
+  for(let i=0;i<Math.floor(LOOKAHEAD_COLS/6); i++) spawnColumnGroup();
+  ensureColumns(VISIBLE_COLS + LOOKAHEAD_COLS);
+  resetPlayer();
+  // build UI using async builders, then render when ready
+  buildPalette().then(()=> buildSkins()).then(()=> render());
+
+   window._gj = { columns, resetState: resetState, startGame, stats, entities, toggleHardcore };
+
+})();
+</script>
+</body>
+</html>
