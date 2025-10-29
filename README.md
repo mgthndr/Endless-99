@@ -1,35 +1,12 @@
 <div align= "center" >
-  <h1 align = "center" >Welcome to my profile (under construction)</h1>
+  <h1 align = "center" >Endless 99 (Html game)</h1>
+  reach 5,000 score
   <p align="center">
-  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/mgthndr?style=flat-square">
-  <img alt="GitHub forks" src="https://img.shields.io/github/forks/mgthndr/Mgthndr?style=flat-square">
-  <img alt="GitHub watchers" src="https://img.shields.io/github/watchers/mgthndr/Mgthndr?style=flat-square">
-  <img alt="GitHub com commi commit" src="https://img.shields.io/github/last-commit/mgthndr/Mgthndr?style=flat-square">
 </p>
 </div>
 
-<div align="center">
-        <img Visitorsitor Stats" 
-            src="https://widgetbite.com/stats/mgthndr"/>  
-    </div>
+> [!CAUTION]
+> Mostly made with AI in structure only, hand-edited.
+> Its just a game to be created, not that important.
 
-
-
-> [!NOTE]
-> Any questions or errors about my repositories [Send Email](https://mail.google.com/mail/u/1/#inbox?compose=CllgCJlHDxcZKFRRgmtTpvCKFfWQxdwtRBvHZsnGrfFTBglsRgrTfnMXcHvZSvTJvSRGzKdDbVV).
->
-
-## Information: <sup>`Last Update 25/08/25`</sup>
-`ABOUT ME` Software engineering student, experienced in .Lua code and a graduate in Java programming (despues lo alargo mas)
-
-* Aca pondria en lo que se me da bien o temas aprendidos
-
- `TEST`  
-
- `TEST` 
-
-## Statistics:
-   ![mgthndr's Stats](https://github-readme-stats.vercel.app/api?username=mgthndr&theme=dark&show_icons=true&hide_border=true&count_private=true) ![mgthndr's Streak](https://github-readme-streak-stats.herokuapp.com/?user=mgthndr&theme=dark&hide_border=true)
-
-> asdfgfsa
-
+Made with promise, async-await, arrays with editable skin/color variables, the skins are the most boring part because the canva html format for creating them is the worst; it would be better to put an image on top of the Cube, but I don't have time for each skin.
