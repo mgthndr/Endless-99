@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🖱️ Clicker Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            gap: 20px;
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* ===== PANEL IZQUIERDO: ESTADÍSTICAS ===== */
+        .stats-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #1e3c72;
+            border-bottom: 3px solid #2a5298;
+            padding-bottom: 10px;
+        }
+
+        .stat-item {
+            background: #f0f4f8;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 4px solid #2a5298;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #1e3c72;
+        }
+
+        .currency-icon {
+            color: #ffc107;
+        }
+
+        /* ===== PANEL CENTRAL: CLICKER ===== */
+        .clicker-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            min-height: 500px;
+        }
+
+        .clicker-title {
+            font-size: 2em;
+            font-weight: bold;
+            color: #1e3c72;
+            text-align: center;
+        }
+
+        .clicker-area {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            background: linear-gradient(135deg, #e0e7ff 0%, #f5f7fa 100%);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 3px dashed #2a5298;
+        }
+
+        .clickable-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: 4px solid #ffc107;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 2em;
+            transition: all 0.1s ease;
+            user-select: none;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+            position: absolute;
+        }
+
+        .clickable-circle:hover {
+            transform: scale(1.1);
+            box-shadow: 0 15px 35px rgba(102, 126, 234, 0.6);
+        }
+
+        .clickable-circle:active {
+            transform: scale(0.95);
+        }
+
+        .click-feedback {
+            position: absolute;
+            pointer-events: none;
+            font-weight: bold;
+            font-size: 1.5em;
+            animation: floatUp 1s ease-out forwards;
+        }
+
+        @keyframes floatUp {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-60px) scale(1.5);
+            }
+        }
+
+        .clicks-per-second {
+            text-align: center;
+            font-size: 0.95em;
+            color: #666;
+            padding: 10px;
+            background: #f0f4f8;
+            border-radius: 8px;
+        }
+
+        /* ===== PANEL DERECHO: TIENDA ===== */
+        .shop-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-height: 500px;
+        }
+
+        .shop-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #1e3c72;
+            border-bottom: 3px solid #ffc107;
+            padding-bottom: 10px;
+        }
+
+        .upgrade-card {
+            background: #f0f4f8;
+            padding: 12px;
+            border-radius: 10px;
+            border: 2px solid #e0e0e0;
+            transition: all 0.3s;
+            cursor: pointer;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .upgrade-card:hover {
+            border-color: #2a5298;
+            box-shadow: 0 5px 15px rgba(42, 82, 152, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .upgrade-card.affordable {
+            background: #e8f5e9;
+            border-color: #4caf50;
+        }
+
+        .upgrade-card.affordable:hover {
+            background: #c8e6c9;
+        }
+
+        .upgrade-card.unaffordable {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .upgrade-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .upgrade-name {
+            font-weight: bold;
+            color: #1e3c72;
+            font-size: 0.95em;
+        }
+
+        .upgrade-count {
+            background: #2a5298;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+
+        .upgrade-desc {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .upgrade-cost {
+            font-size: 0.9em;
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .tab-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .tab-btn {
+            padding: 8px 12px;
+            border: 2px solid #2a5298;
+            background: white;
+            color: #2a5298;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            background: #2a5298;
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            min-height: 300px;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            body {
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .clicker-area {
+                width: 250px;
+                height: 250px;
+            }
+
+            .clickable-circle {
+                width: 120px;
+                height: 120px;
+                font-size: 2.5em;
+            }
+
+            .stats-panel, .shop-panel {
+                padding: 15px;
+            }
+
+            .clicker-title {
+                font-size: 1.5em;
+            }
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.85em;
+            color: #1565c0;
+        }
+
+        .save-slots {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-top: 15px;
+        }
+
+        .save-slot {
+            background: white;
+            border: 2px solid #2a5298;
+            border-radius: 8px;
+            padding: 10px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s;
+            font-size: 0.85em;
+        }
+
+        .save-slot:hover {
+            background: #f0f4f8;
+            transform: scale(1.05);
+        }
+
+        .save-slot.active {
+            background: #2a5298;
+            color: white;
+            border-color: #ffc107;
+        }
+
+        .slot-number {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .slot-money {
+            color: #ffc107;
+            font-size: 0.9em;
+        }
+
+        .auto-circle {
+            position: absolute;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ff6b9d, #c44569);
+            border: 2px solid #ffc107;
+            box-shadow: 0 5px 15px rgba(255, 107, 157, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- PANEL IZQUIERDO: ESTADÍSTICAS -->
+        <div class="stats-panel">
+            <div class="panel-title">📊 ESTADÍSTICAS</div>
+            
+            <div class="stat-item">
+                <div class="stat-label">Total de Dinero</div>
+                <div class="stat-value"><span class="currency-icon">💰</span> <span id="totalMoney">0</span></div>
+            </div>
+
+            <div class="stat-item">
+                <div class="stat-label">Dinero por Click</div>
+                <div class="stat-value"><span class="currency-icon">+</span><span id="clickValue">1</span></div>
+            </div>
+
+            <div class="stat-item">
+                <div class="stat-label">Dinero/Segundo</div>
+                <div class="stat-value"><span class="currency-icon">📈</span> <span id="dpsValue">0</span></div>
+            </div>
+
+            <div class="stat-item">
+                <div class="stat-label">Total de Clicks</div>
+                <div class="stat-value">🖱️ <span id="totalClicks">0</span></div>
+            </div>
+
+            <div class="stat-item">
+                <div class="stat-label">Tiempo Jugando</div>
+                <div class="stat-value">⏱️ <span id="playtime">0s</span></div>
+            </div>
+
+            <div class="info-box">
+                💡 <strong>Tip:</strong> Invierte en mejoras para aumentar tus ganancias pasivas
+            </div>
+
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 2px solid #ddd;">
+                <div style="font-weight: bold; margin-bottom: 8px;">💾 MIS PARTIDAS</div>
+                <div class="save-slots">
+                    <div class="save-slot active" data-slot="0" onclick="switchSave(0)">
+                        <div class="slot-number">Partida 1</div>
+                        <div class="slot-money">💰 <span id="save0-money">0</span></div>
+                    </div>
+                    <div class="save-slot" data-slot="1" onclick="switchSave(1)">
+                        <div class="slot-number">Partida 2</div>
+                        <div class="slot-money">💰 <span id="save1-money">0</span></div>
+                    </div>
+                    <div class="save-slot" data-slot="2" onclick="switchSave(2)">
+                        <div class="slot-number">Partida 3</div>
+                        <div class="slot-money">💰 <span id="save2-money">0</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <button style="background: #dc3545; color: white; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px;" onclick="resetGame()">🔄 Reiniciar Partida</button>
+        </div>
+
+        <!-- PANEL CENTRAL: CLICKER -->
+        <div class="clicker-panel">
+            <div class="clicker-title"></div>
+            
+            <div class="clicker-area" id="clickerArea">
+                <div class="auto-circle" id="autoCircle" style="width: 20px; height: 20px;">🤖</div>
+                <div class="clickable-circle" id="clickableCircle">👆</div>
+            </div>
+
+            <div class="clicks-per-second" id="cpsDisplay">Clicks/seg: 0</div>
+        </div>
+
+        <!-- PANEL DERECHO: TIENDA -->
+        <div class="shop-panel">
+            <div class="shop-title">🛒 TIENDA</div>
+
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="switchTab('upgrades')">🚀 Mejoras</button>
+                <button class="tab-btn" onclick="switchTab('passive')">⚙️ Pasivas</button>
+            </div>
+
+            <!-- TAB: MEJORAS -->
+            <div id="upgrades" class="tab-content active"></div>
+
+            <!-- TAB: MEJORAS PASIVAS -->
+            <div id="passive" class="tab-content"></div>
+        </div>
+    </div>
+
+    <script>
+        // ===== ESTADO DEL JUEGO =====
+        const game = {
+            money: 0,
+            totalMoney: 0,
+            clickValue: 1,
+            dps: 0, // dinero por segundo
+            totalClicks: 0,
+            playtime: 0,
+            clickCooldown: 0, // en ms
+            lastClickTime: 0,
+            autoClickRate: 0, // clicks por segundo automáticos
+            circleSize: 80, // tamaño base del círculo
+            autoCircleSize: 20, // tamaño del círculo automático
+
+            // Upgrades de click
+            upgrades: {
+                betterClick: { name: 'Click Mejorado', cost: 50, baseCost: 50, level: 0, increase: 1, type: 'click' },
+                superClick: { name: 'Súper Click', cost: 200, baseCost: 200, level: 0, increase: 5, type: 'click' },
+                megaClick: { name: '🔥 Mega Click', cost: 1000, baseCost: 1000, level: 0, increase: 25, type: 'click' },
+                fasterClick: { name: 'Clicks Rápidos', cost: 100, baseCost: 100, level: 0, decrease: 50, type: 'cooldown' }, // reduce cooldown en 50ms
+                speedClicking: { name: '⚡ Velocidad Extrema', cost: 500, baseCost: 500, level: 0, decrease: 150, type: 'cooldown' },
+                biggerCircle: { name: '📄 Círculo Grande', cost: 150, baseCost: 150, level: 0, sizeIncrease: 10, type: 'size' },
+                hugeCircle: { name: '🔴 Círculo Gigante', cost: 600, baseCost: 600, level: 0, sizeIncrease: 30, type: 'size' },
+                massiveCircle: { name: '⭕ Círculo Masivo', cost: 2500, baseCost: 2500, level: 0, sizeIncrease: 60, type: 'size' },
+            },
+
+            // Mejoras pasivas (ganancias automáticas)
+            passive: {
+                autoClicker1: { name: '🤖 Auto-Click Básico', cost: 300, baseCost: 300, level: 0, rate: 1, type: 'auto' }, // 1 click/seg
+                autoClicker2: { name: '🤖 Auto-Click Pro', cost: 1000, baseCost: 1000, level: 0, rate: 5, type: 'auto' }, // 5 clicks/seg
+                moneyMachine: { name: '💳 Máquina de Dinero', cost: 2000, baseCost: 2000, level: 0, dps: 10, type: 'dps' }, // +10 dinero/seg
+                goldMiner: { name: '⛏️ Minero de Oro', cost: 5000, baseCost: 5000, level: 0, dps: 50, type: 'dps' }, // +50 dinero/seg
+                cashFactory: { name: '🏭 Fábrica de Dinero', cost: 10000, baseCost: 10000, level: 0, dps: 200, type: 'dps' }, // +200 dinero/seg
+                autoCircle1: { name: '🔵 Círculo Auto Pequeño', cost: 400, baseCost: 400, level: 0, sizeIncrease: 5, type: 'autoCircleSize' }, // +5px
+                autoCircle2: { name: '🟠 Círculo Auto Grande', cost: 1200, baseCost: 1200, level: 0, sizeIncrease: 15, type: 'autoCircleSize' }, // +15px
+                autoCircle3: { name: '⚪ Círculo Auto Masivo', cost: 3500, baseCost: 3500, level: 0, sizeIncrease: 35, type: 'autoCircleSize' }, // +35px
+            }
+        };
+
+        // ===== ESTADO DE GUARDAR PARTIDA =====
+        let currentSaveSlot = 0; // slot actual (0, 1, 2)
+        const saves = [{}, {}, {}]; // 3 espacios de almacenamiento
+
+        // ===== MOVIMIENTO DEL CÍRCULO AUTOMÁTICO =====
+        let autoCircleX = 250; // posición X inicial
+        let autoCircleY = 250; // posición Y inicial
+        let autoCircleVelX = 3; // velocidad X (px por frame) - AUMENTADO
+        let autoCircleVelY = 2; // velocidad Y (px por frame) - AUMENTADO
+
+        // Cambiar de partida
+        function switchSave(slotIndex) {
+            if (slotIndex < 0 || slotIndex > 2) return;
+            if (slotIndex === currentSaveSlot) return;
+
+            // Guardar partida actual
+            saveGameToSlot(currentSaveSlot);
+
+            // Cambiar slot
+            currentSaveSlot = slotIndex;
+
+            // Cargar nueva partida
+            loadGameFromSlot(slotIndex);
+
+            // Actualizar UI
+            updateSaveSlotUI();
+            updateUI();
+        }
+
+        // Guardar juego en slot específico
+        function saveGameToSlot(slotIndex) {
+            saves[slotIndex] = JSON.parse(JSON.stringify(game));
+            localStorage.setItem(`save${slotIndex}`, JSON.stringify(saves[slotIndex]));
+        }
+
+        // Cargar juego de slot específico
+        function loadGameFromSlot(slotIndex) {
+            const saved = localStorage.getItem(`save${slotIndex}`);
+            if (saved) {
+                const data = JSON.parse(saved);
+                Object.assign(game, data);
+                saves[slotIndex] = data;
+            } else {
+                // Si no existe, crear nuevo juego
+                resetGame();
+                saves[slotIndex] = JSON.parse(JSON.stringify(game));
+            }
+        }
+
+        // Actualizar UI de slots de guardar
+        function updateSaveSlotUI() {
+            for (let i = 0; i < 3; i++) {
+                const slot = document.querySelector(`[data-slot="${i}"]`);
+                if (slot) {
+                    if (i === currentSaveSlot) {
+                        slot.classList.add('active');
+                    } else {
+                        slot.classList.remove('active');
+                    }
+                    // Actualizar dinero mostrado
+                    const money = saves[i].money || 0;
+                    slot.querySelector(`#save${i}-money`).textContent = formatNumber(money);
+                }
+            }
+        }
+
+        // ===== FUNCIONES PRINCIPALES =====
+
+        // Inicializar tienda
+        function initShop() {
+            renderUpgrades('upgrades', game.upgrades);
+            renderUpgrades('passive', game.passive);
+        }
+
+        // Renderizar upgrades
+        function renderUpgrades(tabId, upgrades) {
+            const container = document.getElementById(tabId);
+            if (!container) {
+                console.error('❌ Container not found:', tabId);
+                return;
+            }
+            
+            container.innerHTML = '';
+            console.log('✅ Renderizando upgrades en', tabId, ':', Object.keys(upgrades).length, 'items');
+
+            Object.entries(upgrades).forEach(([key, upgrade]) => {
+                const card = document.createElement('div');
+                const affordable = game.money >= upgrade.cost;
+                card.className = `upgrade-card ${affordable ? 'affordable' : 'unaffordable'}`;
+
+                let description = '';
+                if (upgrade.type === 'click') {
+                    description = `+${upgrade.increase} dinero/click`;
+                } else if (upgrade.type === 'cooldown') {
+                    description = `-${upgrade.decrease}ms entre clicks`;
+                } else if (upgrade.type === 'auto') {
+                    description = `+${upgrade.rate} click automático/seg`;
+                } else if (upgrade.type === 'dps') {
+                    description = `+${upgrade.dps} dinero/seg`;
+                } else if (upgrade.type === 'size') {
+                    description = `+${upgrade.sizeIncrease}px de tamaño`;
+                } else if (upgrade.type === 'autoCircleSize') {
+                    description = `+${upgrade.sizeIncrease}px tamaño círculo automático`;
+                }
+
+                card.innerHTML = `
+                    <div class="upgrade-header">
+                        <div class="upgrade-name">${upgrade.name}</div>
+                        <div class="upgrade-count">${upgrade.level}x</div>
+                    </div>
+                    <div class="upgrade-desc">${description}</div>
+                    <div class="upgrade-cost">💰 $${upgrade.cost}</div>
+                `;
+
+                card.onclick = () => buyUpgrade(key, tabId);
+                container.appendChild(card);
+            });
+        }
+
+        // Comprar mejora
+        function buyUpgrade(key, tabId) {
+            const upgrades = tabId === 'upgrades' ? game.upgrades : game.passive;
+            const upgrade = upgrades[key];
+
+            if (game.money >= upgrade.cost) {
+                game.money -= upgrade.cost;
+                upgrade.level += 1;
+
+                // Aplicar efecto de la mejora
+                if (upgrade.type === 'click') {
+                    game.clickValue += upgrade.increase;
+                } else if (upgrade.type === 'cooldown') {
+                    game.clickCooldown = Math.max(0, game.clickCooldown - upgrade.decrease);
+                } else if (upgrade.type === 'auto') {
+                    game.autoClickRate += upgrade.rate;
+                } else if (upgrade.type === 'dps') {
+                    game.dps += upgrade.dps;
+                } else if (upgrade.type === 'size') {
+                    game.circleSize += upgrade.sizeIncrease;
+                    updateCircleSize();
+                } else if (upgrade.type === 'autoCircleSize') {
+                    game.autoCircleSize += upgrade.sizeIncrease;
+                }
+
+                // Aumentar costo para próxima compra (formula exponencial)
+                upgrade.cost = Math.round(upgrade.baseCost * Math.pow(1.15, upgrade.level));
+
+                updateDisplay();
+                renderUpgrades(tabId, upgrades);
+            }
+        }
+
+        // Cambiar tab
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+            document.getElementById(tab).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Click en el círculo
+        function handleClick(e) {
+            const now = Date.now();
+            if (now - game.lastClickTime < game.clickCooldown) return;
+
+            game.lastClickTime = now;
+            game.money += game.clickValue;
+            game.totalMoney += game.clickValue;
+            game.totalClicks += 1;
+
+            // Animación de feedback
+            const circle = document.getElementById('clickableCircle');
+            const rect = circle.getBoundingClientRect();
+            const feedback = document.createElement('div');
+            feedback.className = 'click-feedback';
+            feedback.textContent = `+${game.clickValue}`;
+            feedback.style.left = (rect.left - 150) + 'px';
+            feedback.style.top = (rect.top - 150) + 'px';
+            feedback.style.color = `hsl(${Math.random() * 360}, 100%, 50%)`;
+
+            document.body.appendChild(feedback);
+            setTimeout(() => feedback.remove(), 1000);
+
+            // Mover círculo a posición aleatoria
+            moveCircle();
+
+            // Cambiar color
+            circle.style.background = `hsl(${Math.random() * 360}, 70%, 55%)`;
+
+            updateDisplay();
+        }
+
+        // Variables para track position del círculo grande
+        let clickCircleX = 250;
+        let clickCircleY = 250;
+
+        // Mover círculo
+        function moveCircle() {
+            const circle = document.getElementById('clickableCircle');
+            const area = document.getElementById('clickerArea');
+            const circleRadius = game.circleSize / 2;
+
+            const maxX = area.offsetWidth - game.circleSize;
+            const maxY = area.offsetHeight - game.circleSize;
+
+            clickCircleX = Math.random() * maxX + circleRadius;
+            clickCircleY = Math.random() * maxY + circleRadius;
+
+            circle.style.left = (clickCircleX - circleRadius) + 'px';
+            circle.style.top = (clickCircleY - circleRadius) + 'px';
+        }
+
+        // Actualizar tamaño del círculo
+        function updateCircleSize() {
+            const circle = document.getElementById('clickableCircle');
+            circle.style.width = game.circleSize + 'px';
+            circle.style.height = game.circleSize + 'px';
+            
+            // Ajustar font-size proporcionalmente
+            circle.style.fontSize = (game.circleSize / 40) + 'em';
+            
+            moveCircle();
+        }
+
+        // Ganancia pasiva (auto-click + DPS)
+        function passiveIncome() {
+            const autoClicks = game.autoClickRate * (1 / 10); // cada 100ms
+            const dpsMoney = game.dps / 10; // cada 100ms
+
+            game.money += autoClicks * game.clickValue + dpsMoney;
+            game.totalMoney += autoClicks * game.clickValue + dpsMoney;
+            game.totalClicks += autoClicks;
+        }
+
+        // Mover círculo automático
+        function moveAutoCircle() {
+            const autoCircle = document.getElementById('autoCircle');
+            if (!autoCircle) return;
+
+            const area = document.querySelector('.clicker-area');
+            const areaRect = area.getBoundingClientRect();
+            const areaWidth = areaRect.width;
+            const areaHeight = areaRect.height;
+            const radius = game.autoCircleSize / 2;
+
+            // Actualizar posición con velocidad
+            autoCircleX += autoCircleVelX;
+            autoCircleY += autoCircleVelY;
+
+            // Rebote en bordes izquierdo y derecho
+            if (autoCircleX - radius <= 0 || autoCircleX + radius >= areaWidth) {
+                autoCircleVelX *= -1;
+                autoCircleX = Math.max(radius, Math.min(areaWidth - radius, autoCircleX));
+            }
+
+            // Rebote en bordes superior e inferior
+            if (autoCircleY - radius <= 0 || autoCircleY + radius >= areaHeight) {
+                autoCircleVelY *= -1;
+                autoCircleY = Math.max(radius, Math.min(areaHeight - radius, autoCircleY));
+            }
+
+            autoCircle.style.left = (autoCircleX - radius) + 'px';
+            autoCircle.style.top = (autoCircleY - radius) + 'px';
+            autoCircle.style.width = game.autoCircleSize + 'px';
+            autoCircle.style.height = game.autoCircleSize + 'px';
+            autoCircle.style.fontSize = (game.autoCircleSize / 40) + 'em';
+        }
+
+        // Verificar colisión entre círculo automático y círculo clickeable
+        function checkAutoCircleCollision() {
+            const clickableCircle = document.querySelector('.clickable-circle');
+            
+            if (!clickableCircle) return;
+
+            // Posición del círculo automático
+            const autoX = autoCircleX;
+            const autoY = autoCircleY;
+            const autoRadius = game.autoCircleSize / 2;
+
+            // Posición del círculo clickeable (usar variables tracked)
+            const clickX = clickCircleX;
+            const clickY = clickCircleY;
+            const clickRadius = game.circleSize / 2;
+
+            // Distancia entre centros
+            const distance = Math.sqrt(Math.pow(autoX - clickX, 2) + Math.pow(autoY - clickY, 2));
+
+            // Verificar si hay colisión (suma de radios > distancia)
+            return distance < (autoRadius + clickRadius);
+        }
+
+        // Auto-click cuando hay colisión
+        let autoClickInterval = null;
+        function startAutoClick() {
+            if (autoClickInterval) return;
+
+            autoClickInterval = setInterval(() => {
+                if (checkAutoCircleCollision()) {
+                    // Simular click automático
+                    game.money += game.clickValue;
+                    game.totalMoney += game.clickValue;
+                    game.totalClicks += 1;
+
+                    // Animar círculo clickeable
+                    const circle = document.querySelector('.clickable-circle');
+                    circle.style.transform = 'scale(0.9)';
+                    setTimeout(() => {
+                        circle.style.transform = 'scale(1)';
+                    }, 50);
+                } else {
+                    // Si no hay colisión, detener auto-click
+                    stopAutoClick();
+                }
+            }, 100); // 0.1 segundos entre clicks
+        }
+
+        function stopAutoClick() {
+            if (autoClickInterval) {
+                clearInterval(autoClickInterval);
+                autoClickInterval = null;
+            }
+        }
+
+        // Animar círculo automático
+        function animateAutoCircle() {
+            moveAutoCircle();
+
+            // Si hay colisión, iniciar auto-click
+            if (checkAutoCircleCollision()) {
+                startAutoClick();
+            } else {
+                stopAutoClick();
+            }
+        }
+
+        // Actualizar display
+        function updateDisplay() {
+            document.getElementById('totalMoney').textContent = Math.floor(game.money);
+            document.getElementById('clickValue').textContent = game.clickValue;
+            document.getElementById('dpsValue').textContent = (game.dps + game.autoClickRate * game.clickValue).toFixed(1);
+            document.getElementById('totalClicks').textContent = Math.floor(game.totalClicks);
+        }
+
+        // Actualizar CPS display
+        function updateCPS() {
+            const cps = game.autoClickRate + (game.dps / game.clickValue);
+            document.getElementById('cpsDisplay').textContent = `Clicks/seg: ${cps.toFixed(1)}`;
+        }
+
+        // Actualizar tiempo jugando
+        function updatePlaytime() {
+            game.playtime += 1;
+            const hours = Math.floor(game.playtime / 3600);
+            const minutes = Math.floor((game.playtime % 3600) / 60);
+            const seconds = game.playtime % 60;
+
+            let timeStr = '';
+            if (hours > 0) timeStr += `${hours}h `;
+            if (minutes > 0) timeStr += `${minutes}m `;
+            timeStr += `${seconds}s`;
+
+            document.getElementById('playtime').textContent = timeStr;
+        }
+
+        // ===== SISTEMA DE GUARDADO =====
+
+        // Guardar progreso en localStorage (ahora usa slots)
+        function saveGame() {
+            saveGameToSlot(currentSaveSlot);
+            console.log('💾 Juego guardado en slot ' + (currentSaveSlot + 1) + ':', new Date().toLocaleTimeString());
+        }
+
+        // Cargar progreso desde localStorage (ahora usa slots)
+        function loadGame() {
+            for (let i = 0; i < 3; i++) {
+                const saved = localStorage.getItem(`save${i}`);
+                if (saved) {
+                    try {
+                        saves[i] = JSON.parse(saved);
+                    } catch (e) {
+                        console.error('Error cargando slot', i, e);
+                    }
+                }
+            }
+
+            // Cargar slot 0 por defecto
+            currentSaveSlot = 0;
+            loadGameFromSlot(0);
+            updateSaveSlotUI();
+        }
+
+        // Eliminar progreso guardado
+        function resetGame() {
+            if (confirm('⚠️ ¿Estás seguro? Esto eliminará TODO tu progreso en la partida actual.')) {
+                // Limpiar datos del slot actual
+                localStorage.removeItem(`save${currentSaveSlot}`);
+                
+                // Reiniciar juego actual
+                Object.assign(game, {
+                    money: 0,
+                    totalMoney: 0,
+                    clickValue: 1,
+                    dps: 0,
+                    totalClicks: 0,
+                    playtime: 0,
+                    clickCooldown: 0,
+                    lastClickTime: 0,
+                    autoClickRate: 0,
+                    circleSize: 80,
+                    autoCircleSize: 20,
+                    upgrades: {
+                        betterClick: { name: 'Click Mejorado', cost: 50, baseCost: 50, level: 0, increase: 1, type: 'click' },
+                        superClick: { name: 'Súper Click', cost: 200, baseCost: 200, level: 0, increase: 5, type: 'click' },
+                        megaClick: { name: '🔥 Mega Click', cost: 1000, baseCost: 1000, level: 0, increase: 25, type: 'click' },
+                        fasterClick: { name: 'Clicks Rápidos', cost: 100, baseCost: 100, level: 0, decrease: 50, type: 'cooldown' },
+                        speedClicking: { name: '⚡ Velocidad Extrema', cost: 500, baseCost: 500, level: 0, decrease: 150, type: 'cooldown' },
+                        biggerCircle: { name: '📄 Círculo Grande', cost: 150, baseCost: 150, level: 0, sizeIncrease: 10, type: 'size' },
+                        hugeCircle: { name: '🔴 Círculo Gigante', cost: 600, baseCost: 600, level: 0, sizeIncrease: 30, type: 'size' },
+                        massiveCircle: { name: '⭕ Círculo Masivo', cost: 2500, baseCost: 2500, level: 0, sizeIncrease: 60, type: 'size' },
+                    },
+                    passive: {
+                        autoClicker1: { name: '🤖 Auto-Click Básico', cost: 300, baseCost: 300, level: 0, rate: 1, type: 'auto' },
+                        autoClicker2: { name: '🤖 Auto-Click Pro', cost: 1000, baseCost: 1000, level: 0, rate: 5, type: 'auto' },
+                        moneyMachine: { name: '💳 Máquina de Dinero', cost: 2000, baseCost: 2000, level: 0, dps: 10, type: 'dps' },
+                        goldMiner: { name: '⛏️ Minero de Oro', cost: 5000, baseCost: 5000, level: 0, dps: 50, type: 'dps' },
+                        cashFactory: { name: '🏭 Fábrica de Dinero', cost: 10000, baseCost: 10000, level: 0, dps: 200, type: 'dps' },
+                        autoCircle1: { name: '🔵 Círculo Auto Pequeño', cost: 400, baseCost: 400, level: 0, sizeIncrease: 5, type: 'autoCircleSize' },
+                        autoCircle2: { name: '🟠 Círculo Auto Grande', cost: 1200, baseCost: 1200, level: 0, sizeIncrease: 15, type: 'autoCircleSize' },
+                        autoCircle3: { name: '⚪ Círculo Auto Masivo', cost: 3500, baseCost: 3500, level: 0, sizeIncrease: 35, type: 'autoCircleSize' },
+                    }
+                });
+                
+                updateCircleSize();
+                updateDisplay();
+                initShop();
+                updateSaveSlotUI();
+            }
+        }
+
+        // ===== EVENTOS Y LOOPS =====
+
+        document.getElementById('clickableCircle').addEventListener('click', handleClick);
+
+        // Guardar cada 5 segundos
+        setInterval(saveGame, 5000);
+
+        // Ganancia pasiva cada 100ms
+        setInterval(passiveIncome, 100);
+
+        // Animar círculo automático cada 100ms
+        setInterval(animateAutoCircle, 100);
+
+        // Actualizar display cada 100ms
+        setInterval(() => {
+            updateDisplay();
+            updateCPS();
+        }, 100);
+
+        // Actualizar tiempo cada segundo
+        setInterval(updatePlaytime, 1000);
+
+        // Cargar progreso guardado al iniciar
+        if (!loadGame()) {
+            console.log('🆕 Nuevo juego iniciado');
+        }
+
+        // Inicializar
+        initShop();
+        updateDisplay();
+        updateCPS();
+
+        // Guardar al cerrar la página
+        window.addEventListener('beforeunload', saveGame);
+    </script>
+</body>
+</html>
